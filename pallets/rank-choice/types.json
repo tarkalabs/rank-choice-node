@@ -1,0 +1,10 @@
+{
+  "PollId": "u64",
+  "Poll": {
+    "poll_id": "PollId",
+    "proposer": "AccountId",
+    "num_items": "u8",
+    "content": "Text",
+    "active": "bool"
+  }
+}

@@ -4,7 +4,11 @@
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// https://substrate.dev/docs/en/knowledgebase/runtime/frame
 
-use frame_support::{decl_module, decl_storage, decl_event, decl_error, dispatch, traits::Get};
+use frame_support::{
+		decl_module, decl_storage, 
+		decl_event, decl_error, dispatch, 
+		traits::Get, sp_std::vec::Vec};
+use frame_support::codec::{Encode, Decode};
 use frame_system::ensure_signed;
 
 #[cfg(test)]
@@ -13,12 +17,35 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
+
 /// Configure the pallet by specifying the parameters and types on which it depends.
 pub trait Trait: frame_system::Trait {
 	/// Because this pallet emits events, it depends on the runtime's definition of an event.
 	type Event: From<Event<Self>> + Into<<Self as frame_system::Trait>::Event>;
 }
 
+pub type PollId = u64;
+
+/// Store poll specific data
+#[derive(Encode, Decode, Clone, PartialEq, PartialOrd)]
+pub struct Poll<T: Trait> {
+	/// The ID of the poll
+	pub poll_id: PollId,
+	/// The proposer who creates the poll
+	pub proposer: T::AccountId,
+	/// number of items in the poll
+	pub num_items: u8,
+	/// Frontend encoded content. A description and JSON array of items
+	pub content: Vec<u8>,
+	pub active: bool
+}
+
+
+impl <T: Trait> Poll<T> {
+	pub fn new(poll_id: PollId, proposer: T::AccountId, num_items: u8, content: Vec<u8>) -> Self {
+		Poll {poll_id, proposer, num_items, content, active: true}
+	}
+}
 // The pallet's runtime storage items.
 // https://substrate.dev/docs/en/knowledgebase/runtime/storage
 decl_storage! {
@@ -26,6 +53,9 @@ decl_storage! {
 	// This name may be updated, but each pallet in the runtime must use a unique name.
 	// ---------------------------------vvvvvvvvvvvvvv
 	trait Store for Module<T: Trait> as RankChoiceModule {
+		pub NextPollId get(fn next_poll_id): PollId = 1;
+		pub PollById get(fn poll_by_id): map hasher(twox_64_concat) PollId => Option<Poll<T>>;
+		pub Votes get(fn votes): double_map hasher(twox_64_concat) PollId, hasher(blake2_128_concat) T::AccountId => Vec<u8>;
 		// Learn more about declaring storage items:
 		// https://substrate.dev/docs/en/knowledgebase/runtime/storage#declaring-storage-items
 		Something get(fn something): Option<u32>;
@@ -39,6 +69,7 @@ decl_event!(
 		/// Event documentation should end with an array that provides descriptive names for event
 		/// parameters. [something, who]
 		SomethingStored(u32, AccountId),
+		PollCreated(AccountId, PollId),
 	}
 );
 
@@ -62,6 +93,22 @@ decl_module! {
 
 		// Events must be initialized if they are used by the pallet.
 		fn deposit_event() = default;
+
+		#[weight = 10_000 + T::DbWeight::get().writes(2)]
+		pub fn new_poll(origin, num_items: u8, content: Vec<u8>) -> dispatch::DispatchResult {
+			let who = ensure_signed(origin)?;
+			let poll_id = Self::next_poll_id();
+			let new_poll: Poll<T> = Poll::new(
+				poll_id, 
+				who.clone(), 
+				num_items, 
+				content
+			);
+			PollById::insert(poll_id, new_poll);
+			NextPollId::mutate( |pid| { *pid += 1; });
+			Self::deposit_event(RawEvent::PollCreated(who, poll_id));
+			Ok(())
+		}
 
 		/// An example dispatchable that takes a singles value as a parameter, writes the value to
 		/// storage and emits an event. This function must be dispatched by a signed extrinsic.
