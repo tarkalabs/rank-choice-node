@@ -6,7 +6,7 @@
 
 use frame_support::{
 		decl_module, decl_storage, 
-		decl_event, decl_error, dispatch, 
+		decl_event, decl_error, dispatch, ensure,
 		traits::Get, sp_std::vec::Vec};
 use frame_support::codec::{Encode, Decode};
 use frame_system::ensure_signed;
@@ -25,6 +25,7 @@ pub trait Trait: frame_system::Trait {
 }
 
 pub type PollId = u64;
+pub type Choices = Vec<u8>;
 
 /// Store poll specific data
 #[derive(Encode, Decode, Clone, PartialEq, PartialOrd)]
@@ -55,7 +56,7 @@ decl_storage! {
 	trait Store for Module<T: Trait> as RankChoiceModule {
 		pub NextPollId get(fn next_poll_id): PollId = 1;
 		pub PollById get(fn poll_by_id): map hasher(twox_64_concat) PollId => Option<Poll<T>>;
-		pub Votes get(fn votes): double_map hasher(twox_64_concat) PollId, hasher(blake2_128_concat) T::AccountId => Vec<u8>;
+		pub Votes get(fn votes): double_map hasher(twox_64_concat) PollId, hasher(blake2_128_concat) T::AccountId => Option<Choices>;
 		// Learn more about declaring storage items:
 		// https://substrate.dev/docs/en/knowledgebase/runtime/storage#declaring-storage-items
 		Something get(fn something): Option<u32>;
@@ -70,6 +71,7 @@ decl_event!(
 		/// parameters. [something, who]
 		SomethingStored(u32, AccountId),
 		PollCreated(AccountId, PollId),
+		NewVoteCast(PollId, AccountId),
 	}
 );
 
@@ -80,6 +82,10 @@ decl_error! {
 		NoneValue,
 		/// Errors should have helpful documentation associated with them.
 		StorageOverflow,
+		/// There was no poll with a given id
+		NoSuchPoll,
+		PollNotActive,
+		AlreadyVoted
 	}
 }
 
@@ -108,6 +114,18 @@ decl_module! {
 			NextPollId::mutate( |pid| { *pid += 1; });
 			Self::deposit_event(RawEvent::PollCreated(who, poll_id));
 			Ok(())
+		}
+
+		#[weight = 10_000 + T::DbWeight::get().writes(2)]
+		pub fn cast_vote(origin, poll_id: PollId, votes: Choices) -> dispatch::DispatchResult {
+			let who = ensure_signed(origin)?;
+			let poll: Poll<T> = PollById::get(poll_id).ok_or(Error::<T>::NoSuchPoll)?;
+			ensure!(&poll.active, Error::<T>::PollNotActive);
+			ensure!(!Votes::<T>::contains_key(poll_id, who.clone()), Error::<T>::AlreadyVoted);
+			Votes::<T>::insert(poll_id, who.clone(), votes);
+			Self::deposit_event(RawEvent::NewVoteCast(poll_id, who));
+			Ok(())
+
 		}
 
 		/// An example dispatchable that takes a singles value as a parameter, writes the value to
