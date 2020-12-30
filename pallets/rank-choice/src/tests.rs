@@ -1,15 +1,43 @@
-use crate::{Error, mock::*};
+use crate::{Error, mock::*, RawEvent};
 use frame_support::{assert_ok, assert_noop};
+use frame_system::{EventRecord, Phase};
+use sp_core::{H256};
+
 
 #[test]
 fn it_works_for_default_value() {
 	new_test_ext().execute_with(|| {
-		// Dispatch a signed extrinsic.
+		System::set_block_number(1); // this is important to generate events
 		let next_poll_id = RankChoiceModule::next_poll_id();
 		let content = br#"{"description":"test poll", "items": ["item1", "item2", "item3", "item4"]}"#.to_vec();
 		assert_ok!(RankChoiceModule::new_poll(Origin::signed(1), 4, content)); 
 		let poll = RankChoiceModule::poll_by_id(next_poll_id);
 		assert!(!&poll.is_none());
 		assert_eq!(poll.unwrap().num_items, 4);
+		assert_eq!(last_event(), RawEvent::PollCreated(next_poll_id, 1));
 	});
 }
+
+#[test]
+fn it_records_votes_for_a_poll() {
+	new_test_ext().execute_with(|| {
+		let poll_id = RankChoiceModule::next_poll_id();
+		let content = br#"{"description":"test poll", "items": ["item1", "item2", "item3", "item4"]}"#.to_vec();
+		assert_ok!(RankChoiceModule::new_poll(Origin::signed(1), 4, content)); 
+		let votes = vec![4, 1, 2];
+		assert_ok!(RankChoiceModule::cast_vote(Origin::signed(2), poll_id, votes.clone()));
+		let recorded_votes = RankChoiceModule::votes(poll_id, 2);
+		assert!(!&recorded_votes.is_none());
+		assert_eq!(recorded_votes.unwrap(), votes);
+	});
+}
+// #[test]
+// fn correct_error_for_none_value() {
+// 	new_test_ext().execute_with(|| {
+// 		// Ensure the expected error is thrown when no value is present.
+// 		assert_noop!(
+// 			RankChoiceModule::cause_error(Origin::signed(1)),
+// 			Error::<Test>::NoneValue
+// 		);
+// 	});
+// }

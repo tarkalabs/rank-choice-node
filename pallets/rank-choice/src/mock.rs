@@ -1,19 +1,29 @@
-use crate::{Module, Trait};
+use crate::{Module, Trait, RawEvent};
 use sp_core::H256;
-use frame_support::{impl_outer_origin, parameter_types, weights::Weight};
+use frame_support::{impl_outer_origin, impl_outer_event, parameter_types, weights::Weight};
 use sp_runtime::{
 	traits::{BlakeTwo256, IdentityLookup}, testing::Header, Perbill,
 };
 use frame_system as system;
 
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct Test;
+
 impl_outer_origin! {
 	pub enum Origin for Test {}
 }
+mod rank_choice {
+	pub use crate::Event;
+}
 
-// Configure a mock runtime to test the pallet.
+impl_outer_event! {
+	pub enum Event for Test {
+		system<T>,
+		rank_choice<T>,
+	}
+}
 
-#[derive(Clone, Eq, PartialEq)]
-pub struct Test;
+
 parameter_types! {
 	pub const BlockHashCount: u64 = 250;
 	pub const MaximumBlockWeight: Weight = 1024;
@@ -32,7 +42,7 @@ impl system::Trait for Test {
 	type AccountId = u64;
 	type Lookup = IdentityLookup<Self::AccountId>;
 	type Header = Header;
-	type Event = ();
+	type Event = Event; 
 	type BlockHashCount = BlockHashCount;
 	type MaximumBlockWeight = MaximumBlockWeight;
 	type DbWeight = ();
@@ -50,12 +60,22 @@ impl system::Trait for Test {
 }
 
 impl Trait for Test {
-	type Event = ();
+	type Event = Event;
 }
 
 pub type RankChoiceModule = Module<Test>;
+pub type System = frame_system::Module<Test>;
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
 	system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
+}
+
+pub fn last_event() -> RawEvent<u64> {
+	System::events().into_iter().map(|r| r.event)
+		.filter_map(|e| {
+			if let Event::rank_choice(inner) = e { Some(inner) } else { None }
+		})
+		.last()
+		.unwrap()
 }
