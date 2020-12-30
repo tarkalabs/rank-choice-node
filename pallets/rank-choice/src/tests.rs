@@ -1,7 +1,5 @@
 use crate::{Error, mock::*, RawEvent};
 use frame_support::{assert_ok, assert_noop};
-use frame_system::{EventRecord, Phase};
-use sp_core::{H256};
 
 
 #[test]
@@ -21,6 +19,7 @@ fn it_works_for_default_value() {
 #[test]
 fn it_records_votes_for_a_poll() {
 	new_test_ext().execute_with(|| {
+		System::set_block_number(1); // this is important to generate events
 		let poll_id = RankChoiceModule::next_poll_id();
 		let content = br#"{"description":"test poll", "items": ["item1", "item2", "item3", "item4"]}"#.to_vec();
 		assert_ok!(RankChoiceModule::new_poll(Origin::signed(1), 4, content)); 
@@ -29,15 +28,28 @@ fn it_records_votes_for_a_poll() {
 		let recorded_votes = RankChoiceModule::votes(poll_id, 2);
 		assert!(!&recorded_votes.is_none());
 		assert_eq!(recorded_votes.unwrap(), votes);
+		assert_eq!(last_event(), RawEvent::NewVoteCast(poll_id, 2));
 	});
 }
-// #[test]
-// fn correct_error_for_none_value() {
-// 	new_test_ext().execute_with(|| {
-// 		// Ensure the expected error is thrown when no value is present.
-// 		assert_noop!(
-// 			RankChoiceModule::cause_error(Origin::signed(1)),
-// 			Error::<Test>::NoneValue
-// 		);
-// 	});
-// }
+
+#[test]
+fn it_raises_error_for_duplicate_vote() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1); // this is important to generate events
+		let poll_id = RankChoiceModule::next_poll_id();
+		let content = br#"{"description":"test poll", "items": ["item1", "item2", "item3", "item4"]}"#.to_vec();
+		assert_ok!(RankChoiceModule::new_poll(Origin::signed(1), 4, content)); 
+		let votes = vec![4, 1, 2];
+		assert_ok!(RankChoiceModule::cast_vote(Origin::signed(2), poll_id, votes.clone()));
+		let recorded_votes = RankChoiceModule::votes(poll_id, 2);
+		assert!(!&recorded_votes.is_none());
+		assert_eq!(recorded_votes.unwrap(), votes);
+		assert_eq!(last_event(), RawEvent::NewVoteCast(poll_id, 2));
+		System::set_block_number(2); // this is important to generate events
+		let new_votes = vec![4, 1, 2];
+		assert_noop!(
+			RankChoiceModule::cast_vote(Origin::signed(2), poll_id, new_votes),
+			Error::<Test>::AlreadyVoted
+		);
+	});
+}
