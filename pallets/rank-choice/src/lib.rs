@@ -42,6 +42,9 @@ impl <T: Trait> Poll<T> {
 	pub fn new(poll_id: PollId, proposer: T::AccountId, num_items: u8, content: Vec<u8>) -> Self {
 		Poll {poll_id, proposer, num_items, content, active: true}
 	}
+	pub fn finalize(&mut self) {
+		self.active = false;
+	}
 }
 decl_storage! {
 	trait Store for Module<T: Trait> as RankChoiceModule {
@@ -54,6 +57,7 @@ decl_storage! {
 decl_event!(
 	pub enum Event<T> where AccountId = <T as frame_system::Trait>::AccountId {
 		PollCreated(AccountId, PollId),
+		PollFinalized(PollId),
 		NewVoteCast(PollId, AccountId),
 	}
 );
@@ -62,7 +66,9 @@ decl_error! {
 	pub enum Error for Module<T: Trait> {
 		NoSuchPoll,
 		PollNotActive,
-		AlreadyVoted
+		AlreadyVoted,
+		NotAuthorized,
+		PollAlreadyFinalized
 	}
 }
 
@@ -91,6 +97,18 @@ decl_module! {
 		}
 
 		#[weight = 10_000 + T::DbWeight::get().writes(2)]
+		pub fn finalize_poll(origin, poll_id: PollId) -> dispatch::DispatchResult {
+			let who = ensure_signed(origin)?;
+			let mut poll: Poll<T> = PollById::get(poll_id).ok_or(Error::<T>::NoSuchPoll)?;
+			ensure!(poll.proposer == who, Error::<T>::NotAuthorized);
+			ensure!(&poll.active, Error::<T>::PollAlreadyFinalized);
+			poll.finalize();
+			PollById::insert(poll_id, poll);
+			Self::deposit_event(RawEvent::PollFinalized(poll_id));
+			Ok(())
+		}
+
+		#[weight = 10_000 + T::DbWeight::get().reads_writes(2, 1)]
 		pub fn cast_vote(origin, poll_id: PollId, votes: Choices) -> dispatch::DispatchResult {
 			let who = ensure_signed(origin)?;
 			let poll: Poll<T> = PollById::get(poll_id).ok_or(Error::<T>::NoSuchPoll)?;
@@ -101,5 +119,7 @@ decl_module! {
 			Ok(())
 
 		}
+
+
 	}
 }

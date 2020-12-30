@@ -3,7 +3,7 @@ use frame_support::{assert_ok, assert_noop};
 
 
 #[test]
-fn it_works_for_default_value() {
+fn it_creates_a_poll() {
 	new_test_ext().execute_with(|| {
 		System::set_block_number(1); // this is important to generate events
 		let next_poll_id = RankChoiceModule::next_poll_id();
@@ -13,6 +13,26 @@ fn it_works_for_default_value() {
 		assert!(!&poll.is_none());
 		assert_eq!(poll.unwrap().num_items, 4);
 		assert_eq!(last_event(), RawEvent::PollCreated(next_poll_id, 1));
+	});
+}
+
+#[test]
+fn it_finalizes_the_poll() {
+	new_test_ext().execute_with(|| {
+		System::set_block_number(1); // this is important to generate events
+		let next_poll_id = RankChoiceModule::next_poll_id();
+		let content = br#"{"description":"test poll", "items": ["item1", "item2", "item3", "item4"]}"#.to_vec();
+		assert_ok!(RankChoiceModule::new_poll(Origin::signed(1), 4, content)); 
+		let poll = RankChoiceModule::poll_by_id(next_poll_id);
+		assert!(!&poll.is_none());
+		assert_eq!(poll.unwrap().num_items, 4);
+		assert_eq!(last_event(), RawEvent::PollCreated(next_poll_id, 1));
+		System::set_block_number(1); // this is important to generate events
+		assert_ok!(RankChoiceModule::finalize_poll(Origin::signed(1), next_poll_id));
+
+		let finalized_poll = RankChoiceModule::poll_by_id(next_poll_id);
+		assert!(!&finalized_poll.unwrap().active);
+		assert_eq!(last_event(), RawEvent::PollFinalized(next_poll_id));
 	});
 }
 
