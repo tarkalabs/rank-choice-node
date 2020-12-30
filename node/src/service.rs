@@ -23,6 +23,7 @@ type FullClient = sc_service::TFullClient<Block, RuntimeApi, Executor>;
 type FullBackend = sc_service::TFullBackend<Block>;
 type FullSelectChain = sc_consensus::LongestChain<FullBackend, Block>;
 
+
 pub fn new_partial(config: &Configuration) -> Result<sc_service::PartialComponents<
 	FullClient, FullBackend, FullSelectChain,
 	sp_consensus::DefaultImportQueue<Block, FullClient>,
@@ -71,6 +72,10 @@ pub fn new_partial(config: &Configuration) -> Result<sc_service::PartialComponen
 		config.prometheus_registry(),
 		sp_consensus::CanAuthorWithNativeVersion::new(client.executor().clone()),
 	)?;
+
+	keystore.write().insert_ephemeral_from_seed_by_type::<node_template_runtime::pallet_rank_choice::crypto::Pair>(
+			"//Alice", node_template_runtime::pallet_rank_choice::KEY_TYPE
+	).expect("Creating key with account Alice should succeed.");
 
 	Ok(sc_service::PartialComponents {
 		client, backend, task_manager, import_queue, keystore, select_chain, transaction_pool,
