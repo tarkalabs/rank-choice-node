@@ -3,10 +3,6 @@
 use frame_support::{
 		decl_module, decl_storage, 
 		decl_event, decl_error, dispatch, ensure, debug,
-		sp_runtime,
-		sp_runtime::transaction_validity::{
-			TransactionValidity, TransactionLongevity, ValidTransaction, InvalidTransaction
-		},
 		sp_std::convert::TryInto,
 		traits::Get, sp_std::vec::Vec};
 use sp_core::crypto::KeyTypeId;
@@ -165,7 +161,7 @@ decl_module! {
 
 		#[weight = 10_000 + T::DbWeight::get().writes(1)]
 		pub fn update_blockchain_number(origin, block_no: u32) -> dispatch::DispatchResult {
-			let who = ensure_signed(origin)?;
+			let _who = ensure_signed(origin)?;
 			OffChainNumber::mutate(|n| { *n=block_no;} );
 			Self::deposit_event(RawEvent::OffChainEvent(block_no));
 			Ok(())
